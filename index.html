@@ -20,7 +20,7 @@
 </style>
 </head>
 <body>
-<canvas id="game" width="560" height="700"></canvas>
+<canvas id="game" width="912" height="684"></canvas>
 <div id="hint">Arrows / WASD move &middot; P pause &middot; M mute &middot; Enter start</div>
 <script>
 "use strict";
@@ -32,7 +32,9 @@
 
 const TILE = 20, COLS = 28, ROWS = 31;
 const HUD_H = 60;
-const W = COLS * TILE, H = ROWS * TILE + HUD_H;
+const MW = COLS * TILE, MH = ROWS * TILE;
+const MX = 176, MY = HUD_H; // maze offset — 4:3 canvas (912x684) with side panels
+const W = MX * 2 + MW, H = MY + MH + 4;
 const cv = document.getElementById("game");
 cv.width = W; cv.height = H;
 const ctx = cv.getContext("2d");
@@ -502,7 +504,7 @@ function drawMaze() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (wall[r][c]) {
-        ctx.fillRect(HUD_H + c * TILE, HUD_H + r * TILE, TILE, TILE);
+        ctx.fillRect(MX + c * TILE, MY + r * TILE, TILE, TILE);
       }
     }
   }
@@ -512,7 +514,7 @@ function drawMaze() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (!wall[r][c] || wall[r][c] === 2) continue;
-      const x = HUD_H + c * TILE, y = HUD_H + r * TILE;
+      const x = MX + c * TILE, y = MY + r * TILE;
       const open = (cc, rr) => inBounds(cc, rr) && !wall[rr][cc];
       ctx.beginPath();
       if (open(c, r - 1)) { ctx.moveTo(x, y + 1); ctx.lineTo(x + TILE, y + 1); }
@@ -527,7 +529,7 @@ function drawMaze() {
     for (let c = 0; c < COLS; c++) {
       if (wall[r][c] === 2) {
         ctx.fillStyle = "#ffb8de";
-        ctx.fillRect(HUD_H + c * TILE, HUD_H + r * TILE + TILE / 2 - 2, TILE, 4);
+        ctx.fillRect(MX + c * TILE, MY + r * TILE + TILE / 2 - 2, TILE, 4);
       }
     }
   }
@@ -536,7 +538,7 @@ function drawMaze() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (!dot[r][c]) continue;
-      const x = HUD_H + c * TILE + TILE / 2, y = HUD_H + r * TILE + TILE / 2;
+      const x = MX + c * TILE + TILE / 2, y = MY + r * TILE + TILE / 2;
       if (dot[r][c] === 1) {
         ctx.fillStyle = "#ffb897";
         ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill();
@@ -549,8 +551,8 @@ function drawMaze() {
 }
 
 function drawPac(alpha = 1) {
-  const x = HUD_H + pac.x * TILE + TILE / 2;
-  const y = HUD_H + pac.y * TILE + TILE / 2;
+  const x = MX + pac.x * TILE + TILE / 2;
+  const y = MY + pac.y * TILE + TILE / 2;
   const R = TILE * 0.55 * alpha;
   if (R < 1) return;
   let base;
@@ -570,8 +572,8 @@ function drawPac(alpha = 1) {
 }
 
 function drawGhost(g) {
-  const x = HUD_H + g.x * TILE + TILE / 2;
-  const y = HUD_H + g.y * TILE + TILE / 2;
+  const x = MX + g.x * TILE + TILE / 2;
+  const y = MY + g.y * TILE + TILE / 2;
   const R = TILE * 0.55;
   const frightened = g.state === "frightened";
   const eyesOnly = g.state === "eyes";
@@ -622,25 +624,52 @@ function drawGhost(g) {
 function drawHUD() {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, HUD_H);
-  ctx.fillStyle = "#fff";
-  ctx.font = "16px 'Courier New', monospace";
-  ctx.textAlign = "left";
-  ctx.fillText("SCORE " + String(score).padStart(5, "0"), 16, 24);
+
+  // title
   ctx.textAlign = "center";
-  ctx.fillText("LEVEL " + level, W / 2, 24);
-  ctx.textAlign = "right";
-  ctx.fillText("HI " + String(highScore).padStart(5, "0"), W - 16, 24);
-  // lives
+  ctx.font = "bold 24px 'Courier New', monospace";
+  ctx.fillStyle = "#ffe600";
+  ctx.fillText("PAC-MAN", W / 2, 40);
+
+  const ly = MY + 90;
+  // left panel: score / high score / lives
+  ctx.textAlign = "left";
+  ctx.font = "16px 'Courier New', monospace";
+  const lx = 18;
+  ctx.fillStyle = "#fff";
+  ctx.fillText("SCORE", lx, ly);
+  ctx.fillStyle = "#ffe600";
+  ctx.fillText(String(score).padStart(5, "0"), lx, ly + 22);
+  ctx.fillStyle = "#fff";
+  ctx.fillText("HIGH SCORE", lx, ly + 58);
+  ctx.fillText(String(highScore).padStart(5, "0"), lx, ly + 80);
+  ctx.fillText("LIVES", lx, ly + 118);
   for (let i = 0; i < Math.max(0, lives - 1); i++) {
-    const x = 20 + i * 26, y = 44;
-    const base = Math.PI;
+    const x = lx + 12 + i * 26, y = ly + 142;
     ctx.fillStyle = "#ffe600";
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.arc(x, y, 9, base + 0.5, base - 0.5 + Math.PI * 2);
+    ctx.arc(x, y, 10, Math.PI + 0.5, Math.PI - 0.5 + Math.PI * 2);
     ctx.closePath();
     ctx.fill();
   }
+
+  // right panel: level / dots / controls
+  ctx.textAlign = "right";
+  const rx = W - 18;
+  ctx.fillStyle = "#fff";
+  ctx.font = "16px 'Courier New', monospace";
+  ctx.fillText("LEVEL", rx, ly);
+  ctx.fillStyle = "#ffe600";
+  ctx.fillText(String(level), rx, ly + 22);
+  ctx.fillStyle = "#fff";
+  ctx.fillText("DOTS LEFT", rx, ly + 58);
+  ctx.fillText(String(dotsLeft), rx, ly + 80);
+  ctx.fillStyle = "#8899ff";
+  ctx.font = "13px 'Courier New', monospace";
+  ctx.fillText("ARROWS/WASD MOVE", rx, ly + 130);
+  ctx.fillText("P PAUSE   M MUTE", rx, ly + 150);
+  ctx.fillText("ENTER RESTART", rx, ly + 170);
 }
 
 function drawOverlayText(lines) {
