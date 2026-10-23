@@ -1,33 +1,14 @@
-# Pac-Man (Bionic Clone)
+# Puck-Man
 
-A single-file, dependency-free Pac-Man clone built with vanilla JS + canvas.
+A single-file Pac-Man clone in vanilla JS + canvas, rendered inside an arcade cabinet bezel with a CRT shader.
 
-## How to run
-Open `index.html` in any browser (double-click it, or drag it into a tab). No build step, no server.
+## Play
 
-## Controls
-| Key | Action |
-| --- | --- |
-| Arrow keys / WASD | Move |
-| P | Pause / resume |
-| M | Mute / unmute |
-| Enter or Space | Start / restart (after game over) |
+- Open [index.html](index.html) — that's the whole game (no build step, no dependencies).
+- Arrows / WASD: move · P: pause · M: mute · C: cycle CRT glass mode · Enter: start
 
-## Gameplay
-- Eat all 260 dots to clear the level. Dots = 10 pts, power pellets = 50 pts.
-- Power pellets turn ghosts blue and edible: 200 → 400 → 800 → 1600 pts per ghost.
-- Eaten ghosts return home as eyes and re-enter the fray.
-- 3 lives. Levels get progressively faster.
+## GitHub Pages
 
-## The ghost gang (classic arcade AI)
-- **Blinky** (red) — chases your tile directly.
-- **Pinky** (pink) — targets 4 tiles ahead of you (ambush).
-- **Inky** (cyan) — flanks using Blinky's position + a 2-tile-ahead vector (pincer).
-- **Clyde** (orange) — chases when far, retreats to his corner when close.
+This repo is deployed as-is from the root, so the game lives at:
 
-Ghosts alternate scatter (7s) ↔ chase (20s) with reversals on each switch,
-just like the 1980 arcade original.
-
-## Files
-- `index.html` — the entire game
-- `SPEC.md` — scope-lock spec + task list
+    https://<username>.github.io/<repo-name>/

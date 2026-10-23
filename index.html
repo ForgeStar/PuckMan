@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pac-Man (Bionic Clone)</title>
+<title>パックマン Puck-Man (Bionic Clone)</title>
 <style>
   html, body {
     margin: 0; height: 100%;
@@ -12,7 +12,24 @@
     font-family: "Courier New", monospace;
     user-select: none;
   }
-  canvas { display: block; background: #000; image-rendering: pixelated; }
+  /* Cabinet bezel: the panel art is the box, the game sits in its window */
+  #bezel { position: relative; line-height: 0; }
+  #bezel::before {
+    content: "";
+    display: block;
+    width: 100%;
+    padding-top: 91.3125%; /* panel aspect 1461/1600 */
+    background: url("bezel.png") 0 0 / 100% 100% no-repeat;
+  }
+  canvas {
+    display: block; background: #000; image-rendering: pixelated;
+    position: absolute;
+    /* the screen window inside the panel (percentages of #bezel) */
+    left: 21.6486%; top: 21.1554%;
+    width: 56.3281%; height: 73.1759%;
+  }
+  /* CRT shader layer overlays the game canvas; it is smooth, not pixelated */
+  #fx { image-rendering: auto; }
   #hint {
     position: fixed; bottom: 8px; left: 0; right: 0;
     text-align: center; color: #556; font-size: 12px;
@@ -20,12 +37,15 @@
 </style>
 </head>
 <body>
-<canvas id="game" width="912" height="684"></canvas>
-<div id="hint">Arrows / WASD move &middot; P pause &middot; M mute &middot; Enter start</div>
+<div id="bezel">
+  <canvas id="game" width="580" height="688"></canvas>
+  <canvas id="fx" width="580" height="688"></canvas>
+</div>
+<div id="hint">Arrows / WASD move &middot; P pause &middot; M mute &middot; C CRT: <span id="crtlabel">Glass</span> &middot; Enter start</div>
 <script>
 "use strict";
 // ============================================================
-// PAC-MAN CLONE — single-file, vanilla JS + canvas
+// PUCK-MAN CLONE — single-file, vanilla JS + canvas
 // Reference: classic arcade mechanics (ghost AI per ghost,
 // scatter/chase schedule, frightened mode, eyes->house).
 // ============================================================
@@ -33,15 +53,27 @@
 const TILE = 20, COLS = 28, ROWS = 31;
 const HUD_H = 60;
 const MW = COLS * TILE, MH = ROWS * TILE;
-const MX = 176, MY = HUD_H; // maze offset — 4:3 canvas (912x684) with side panels
-const W = MX * 2 + MW, H = MY + MH + 4;
+const MX = 10, MY = HUD_H; // tight canvas (580x688): maze + HUD, no dead side panels
+const W = MX * 2 + MW, H = MY + MH + 8;
 const cv = document.getElementById("game");
 cv.width = W; cv.height = H;
 const ctx = cv.getContext("2d");
 
+// Scale the cabinet (bezel + game window) to fit the viewport. The canvas
+// is positioned in % of the bezel, so sizing the box sizes everything.
+const PANEL_W = 1600, PANEL_H = 1461; // bezel.png
+const bezel = document.getElementById("bezel");
+function fitCanvas() {
+  const scale = Math.min(1, window.innerWidth / PANEL_W, window.innerHeight / PANEL_H);
+  bezel.style.width = Math.floor(PANEL_W * scale) + "px";
+}
+window.addEventListener("resize", fitCanvas);
+fitCanvas();
+
 // ---------------- Maze ----------------
 // '#' wall  '.' dot  'o' power pellet  '=' door  ' ' empty
-const MAZE = [
+// Three mazes, one per level; after level 3 the sequence cycles back to MAZE1.
+const MAZE1 = [
   "############################",
   "#............##............#",
   "#.####.#####.##.#####.####.#",
@@ -51,47 +83,134 @@ const MAZE = [
   "#.####.##.########.##.####.#",
   "#.####.##.########.##.####.#",
   "#......##....##....##......#",
-  "######.##### ## #####.######",
-  "######.##### ## #####.######",
-  "######.##          ##.######",
-  "######.## ###==### ##.######",
-  "######.## #......# ##.######",
-  "######.## #      # ##.######",
-  "######.## #......# ##.######",
-  "######.## ######## ##.######",
-  "######.##          ##.######",
-  "######.## ######## ##.######",
-  "######.## ######## ##.######",
+  "######.#####.##.#####.######",
+  "######.#####.##.#####.######",
+  "######.##..........##.######",
+  "######.##.###==###.##.######",
+  "######.##.#      #.##.######",
+  ".......##.#      #.##.......",
+  "######.##.#      #.##.######",
+  "######.##.########.##.######",
+  "######.##..........##.######",
+  "######.##.########.##.######",
+  "######.##.########.##.######",
   "#............##............#",
   "#.####.#####.##.#####.####.#",
   "#.####.#####.##.#####.####.#",
   "#o..##.......  .......##..o#",
   "###.##.##.########.##.##.###",
   "###.##.##.########.##.##.###",
-  "#......##....##....##......#",
-  "#.########.##.########.#.#.#",
-  "#.########.##.########.#.#.#",
+  "#......##..........##......#",
+  "#.##########.##.########.#.#",
+  "#.##########.##.########.#.#",
   "#..........................#",
   "############################",
 ];
+const MAZE2 = [
+  "############################",
+  "###......#........#......###",
+  "##..####.#.######.#.####..##",
+  "##.#####.#...##...#.#####.##",
+  "##o..###.###.##.###.###o..##",
+  "####.###............###.####",
+  "####.#####.######.#####.####",
+  "####.#####.######.#####.####",
+  ".....#####........#####.....",
+  "####...###.######.###...####",
+  "######.###.######.###.######",
+  "#####..................#####",
+  "#####.###.###==###.###.#####",
+  "#####.###.#      #.###.#####",
+  "#####.....#      #.....#####",
+  "#####.###.#      #.###.#####",
+  "#####.###.########.###.#####",
+  "#####.###..........###.#####",
+  "#####.######.##.######.#####",
+  "##........................##",
+  "##.######.########.######.##",
+  "##.######.########.######.##",
+  "##.######..........######.##",
+  "..........########..........",
+  "#####.#################.####",
+  "#####.#################.####",
+  "#.........########.........#",
+  "#.#######.########.#######.#",
+  "#.##......########......##.#",
+  "#o...####..........####...o#",
+  "############################",
+];
+const MAZE3 = [
+  "############################",
+  "#......#............#......#",
+  "#.####.#.###.##.###.#.####.#",
+  "#.####.#.###.##.###.#.####.#",
+  "#.####...###....###...####.#",
+  "#o.....#.##########.#.....o#",
+  "###.####.###....###.####.###",
+  "###.####.###.##.###.####.###",
+  "###..........##..........###",
+  "....######.######.######....",
+  "###.######.######.######.###",
+  "###.#####..........#####.###",
+  "###.......###==###.......###",
+  "###.#####.#      #.#####.###",
+  "###.#####.#      #.#####.###",
+  "###....##.#      #.##....###",
+  "###.##.##.########.##.##.###",
+  "###.##................##.###",
+  "###.#####.########.#####.###",
+  "###.##....########....##.###",
+  "###.##.##############.##.###",
+  ".......##############.......",
+  "###.##.....######.....##.###",
+  "###.######.######.######.###",
+  "###.######.######.######.###",
+  "#..........................#",
+  "#.####.#####.##.#####.####.#",
+  "#.####.##o...##....##.####.#",
+  "#.####.##.########.##.####.#",
+  "#.........................o#",
+  "############################",
+];
+const MAZES = [MAZE1, MAZE2, MAZE3];
+// Per-maze geometry. The ghost house is identical in all three mazes
+// (door at row 12 cols 13-14, interior rows 13-15 cols 12-15), so only
+// the Pac-Man start tile and tunnel rows differ.
+const MAZE_CONFIGS = [
+  { pacStart: { x: 13, y: 23 }, tunnelRows: [14] },
+  { pacStart: { x: 13, y: 17 }, tunnelRows: [8, 23] },
+  { pacStart: { x: 13, y: 17 }, tunnelRows: [9, 21] },
+];
+const mazeIndex = () => (level - 1) % MAZES.length;
 
-let wall = [], dot = []; // dot: 0 none, 1 dot, 2 pellet
+let wall = [], dot = [], tunnelRowSet = new Set(); // dot: 0 none, 1 dot, 2 pellet
 function parseMaze() {
+  const maze = MAZES[mazeIndex()];
+  tunnelRowSet = new Set(MAZE_CONFIGS[mazeIndex()].tunnelRows);
   wall = []; dot = [];
   for (let r = 0; r < ROWS; r++) {
     wall[r] = []; dot[r] = [];
     for (let c = 0; c < COLS; c++) {
-      const ch = MAZE[r][c];
+      const ch = maze[r][c];
       wall[r][c] = (ch === "#") ? 1 : (ch === "=" ? 2 : 0); // 2 = door
       dot[r][c] = (ch === ".") ? 1 : (ch === "o" ? 2 : 0);
     }
   }
 }
 const inBounds = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS;
-const isWall = (c, r) => !inBounds(c, r) ? true : wall[r][c] === 1;
-const isDoor = (c, r) => inBounds(c, r) && wall[r][c] === 2;
+// Horizontal tunnel: on the current maze's tunnel rows the left and right
+// edges wrap around (each maze has one or more tunnel rows)
+const wrapC = (c, r) => {
+  if (tunnelRowSet.has(r)) {
+    if (c < 0) return c + COLS;
+    if (c >= COLS) return c - COLS;
+  }
+  return c;
+};
+const isWall = (c, r) => { c = wrapC(c, r); return !inBounds(c, r) ? true : wall[r][c] === 1; };
+const isDoor = (c, r) => { c = wrapC(c, r); return inBounds(c, r) && wall[r][c] === 2; };
 const pacPassable = (c, r) => !isWall(c, r) && !isDoor(c, r);
-const ghostPassable = (c, r) => !isWall(c, r) && !isDoor(c, r); // door handled separately
+const ghostPassable = (c, r) => !isWall(c, r) && !isDoor(c, r); // gate is solid to roaming ghosts; crossing happens via scripted exit/enter paths
 
 const DIRS = [
   { x: 0, y: -1 }, // up
@@ -121,17 +240,146 @@ function beep(freq, dur, type = "square", vol = 0.04, slideTo = 0) {
   o.connect(g); g.connect(a.destination);
   o.start(t); o.stop(t + dur + 0.02);
 }
-let wakaFlip = false;
+// Waka-waka engine: the arcade original is a continuous two-note chatter
+// (fast square-wave alternation) that persists while Pac-Man keeps eating.
+// Each dot eaten *extends* the train instead of firing one isolated beep.
+let wakaUntil = 0, wakaNext = 0, wakaStep = 0;
+// Waka-waka (Namco WSG, per Grok's analysis): a CONTINUOUS train of short
+// frequency *sweeps* — each chomp is a ~67 ms linear sweep, up (257->289 Hz) then
+// down (289->257), running almost back-to-back while eating. No deliberate silence
+// between chomps (a gap is what made the earlier static-blip version read as wrong).
+const WAKA_INTERVAL = 0.13; // one sweep per 67 ms (raise = slower chomps; 0.1 = your slower test)
+const WAKA_LO = 196, WAKA_HI = 220; // sweep endpoints (Hz) — F3/G3; lower = deeper chomp
+const WAKA_VOL = 0.05;   // chomp volume (Grok suggested 0.14; raise = louder)
+function wakaNote(t, f1, f2, dur) {
+  if (muted || !actx) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = "square"; // good WSG approximation (could swap for a pulse PeriodicWave)
+  o.frequency.setValueAtTime(f1, t);
+  o.frequency.linearRampToValueAtTime(f2, t + dur); // rising-then-falling sweep
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(WAKA_VOL, t + 0.004); // fast attack
+  g.gain.setValueAtTime(WAKA_VOL, t + dur * 0.75);      // sustain
+  g.gain.linearRampToValueAtTime(0.001, t + dur);       // quick release
+  o.connect(g); g.connect(actx.destination);
+  o.start(t); o.stop(t + dur + 0.01);
+}
+function wakaTick() {
+  const a = audio(); if (!a || muted) return;
+  const now = a.currentTime;
+  if (wakaNext < now - 0.05) wakaNext = now; // resync if we fell behind
+  while (wakaNext < now + 0.15 && wakaNext < wakaUntil + WAKA_INTERVAL) {
+    const up = (wakaStep % 2 === 0);
+    wakaNote(wakaNext, up ? WAKA_LO : WAKA_HI, up ? WAKA_HI : WAKA_LO, WAKA_INTERVAL * 0.95);
+    wakaStep++;
+    wakaNext += WAKA_INTERVAL;
+  }
+}
 const sfx = {
-  waka: () => { wakaFlip = !wakaFlip; beep(wakaFlip ? 440 : 330, 0.06, "square", 0.03); },
+  waka: () => {
+    const a = audio(); if (!a || muted) return;
+    const now = a.currentTime;
+    if (now >= wakaUntil) { wakaStep = 0; wakaNext = now; } // fresh train
+    wakaUntil = now + 0.3;                                 // keep it fuzzy-continuous
+    wakaTick();
+  },
   pellet: () => beep(200, 0.35, "sawtooth", 0.05, 600),
   ghost: () => beep(300, 0.3, "triangle", 0.06, 900),
   death: () => beep(700, 0.8, "sawtooth", 0.06, 60),
   start: () => beep(880, 0.15, "square", 0.04),
 };
 
+// ---------------- Background music (Namco-WSG style, pure synthesis) ----------------
+// The arcade original has a *continuous* "mid-siren" during play: a low triangle
+// tone whose pitch wobbles up and down via an LFO — that IS the "woo-woo-woo"
+// (it genuinely sounds like a police siren, and that's correct). The waka-waka
+// chomp rides ON TOP of it. Eating a power pellet swaps the siren for a higher,
+// warbling "frightened" alarm until the ghosts come back. A short B-major jingle
+// plays on level start. No samples; all Web Audio oscillators.
+let bgmNodes = null;   // live nodes for the running ambient layer
+let bgmKey = "";        // id of the running layer ("siren:2" | "fright")
+function stopBGM() {
+  if (!bgmNodes) return;
+  for (const n of bgmNodes) { try { n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} }
+  bgmNodes = null; bgmKey = "";
+}
+// Continuous wobble siren. rate = LFO Hz (wobble speed), center = base Hz,
+// depth = how far the pitch swings. Fewer dots left => faster/louder tier.
+function startSiren(rate, center, depth, vol) {
+  const a = audio(); if (!a) return;
+  const o = a.createOscillator(), lfo = a.createOscillator(),
+        lfoGain = a.createGain(), g = a.createGain();
+  o.type = "triangle"; o.frequency.value = center;
+  lfo.type = "triangle"; lfo.frequency.value = rate; lfoGain.gain.value = depth;
+  lfo.connect(lfoGain); lfoGain.connect(o.frequency);
+  g.gain.value = vol;
+  o.connect(g); g.connect(a.destination);
+  o.start(); lfo.start();
+  bgmNodes = [o, lfo, lfoGain, g];
+}
+// Frightened-mode alarm: a high sawtooth (~1080 Hz) hard-wobbled by a square LFO
+// (warbles ~780-1380 Hz) — the eerie "ding-ding" while ghosts run.
+function startFright() {
+  const a = audio(); if (!a) return;
+  const o = a.createOscillator(), lfo = a.createOscillator(),
+        lfoGain = a.createGain(), g = a.createGain();
+  o.type = "sawtooth"; o.frequency.value = 1080;
+  lfo.type = "square"; lfo.frequency.value = 9; lfoGain.gain.value = 300;
+  lfo.connect(lfoGain); lfoGain.connect(o.frequency);
+  g.gain.value = 0.05;
+  o.connect(g); g.connect(a.destination);
+  o.start(); lfo.start();
+  bgmNodes = [o, lfo, lfoGain, g];
+}
+const SIREN_TIERS = [
+  { rate: 2.2, center: 310, depth: 70 },
+  { rate: 2.6, center: 325, depth: 78 },
+  { rate: 3.2, center: 350, depth: 86 },
+  { rate: 4.0, center: 390, depth: 96 },
+];
+const sirenTier = (frac) => (frac > 0.70 ? 0 : frac > 0.45 ? 1 : frac > 0.25 ? 2 : 3);
+// Intro jingle (B major), transcribed from the original ROM song data.
+const INTRO_NOTES = [
+  [494, .107], [988, .107], [740, .107], [622, .107], [988, .054], [740, .160], [622, .214],
+  [523, .107], [1047, .107], [784, .107], [659, .107], [1047, .054], [784, .160], [659, .214],
+  [494, .107], [988, .107], [740, .107], [622, .107], [988, .054], [740, .160], [622, .214],
+  [622, .054], [659, .054], [698, .054], [698, .054], [740, .054], [784, .054],
+  [784, .054], [831, .054], [880, .107], [988, .214],
+];
+function playIntro() {
+  if (muted) return; const a = audio(); if (!a) return;
+  let t = a.currentTime;
+  for (const [f, d] of INTRO_NOTES) {
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.06, t);
+    g.gain.setValueAtTime(0.06, t + d * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.001, t + d);
+    o.connect(g); g.connect(a.destination);
+    o.start(t); o.stop(t + d + 0.01);
+    t += d;
+  }
+}
+// Called every frame: pick the ambient layer for the current state.
+function bgmUpdate() {
+  const a = audio();
+  if (!a || muted || state !== "play") { if (bgmNodes) stopBGM(); return; }
+  if (frightTimer > 0) {
+    if (bgmKey !== "fright") { stopBGM(); startFright(); bgmKey = "fright"; }
+    return;
+  }
+  const frac = dotsTotal ? dotsLeft / dotsTotal : 1;
+  const tier = sirenTier(frac), key = "siren:" + tier;
+  if (bgmKey !== key) {
+    const t = SIREN_TIERS[tier];
+    stopBGM();
+    startSiren(t.rate, t.center, t.depth, 0.05);
+    bgmKey = key;
+  }
+}
+
 // ---------------- Entities ----------------
-const PAC_START = { x: 13, y: 23 };
+const pacStart = () => MAZE_CONFIGS[mazeIndex()].pacStart;
 const HOUSE_EXIT = { x: 13, y: 11 }; // where exiting ghosts appear
 const EYES_TARGET = { x: 13, y: 11 }; // eyes path home, then re-enter
 const HOUSE_REENTER = { x: 13, y: 14 };
@@ -153,13 +401,14 @@ function makeGhosts() {
   ];
 }
 
-let pac, ghosts, level, score, lives, dotsLeft;
+let pac, ghosts, level, score, lives, dotsLeft, dotsTotal;
 let modeIndex, modeTimer, frightTimer, comboCount, houseClock;
-let state, stateTimer; // state: ready | play | dying | levelup | gameover | paused(prev)
-let prevStateBeforePause = "play";
+let state, stateTimer; // state: ready | play | dying | levelup | gameover | paused
+let waitStart = false; // true only on initial load: wait for a key before starting
+let highScore = 0;
 
 function resetPositions() {
-  pac = { x: PAC_START.x, y: PAC_START.y, dir: { x: -1, y: 0 }, next: null };
+  pac = { x: pacStart().x, y: pacStart().y, dir: { x: -1, y: 0 }, next: null };
   ghosts = makeGhosts();
   modeIndex = 0;
   modeTimer = MODE_SCHEDULE[0];
@@ -168,10 +417,12 @@ function resetPositions() {
   houseClock = 0;
 }
 function newGame() {
+  level = 1;
   parseMaze();
   buildMazeLayer();
-  score = 0; lives = 3; level = 1;
+  score = 0; lives = 3;
   dotsLeft = countDots();
+  dotsTotal = dotsLeft;
   resetPositions();
   state = "ready"; stateTimer = 1.6;
 }
@@ -199,6 +450,14 @@ const atCenter = (m) => {
   const cx = Math.round(m.x), cy = Math.round(m.y);
   return Math.abs(m.x - cx) < EPS && Math.abs(m.y - cy) < EPS;
 };
+
+// Tunnel wrap: on a tunnel row, keep x in [-0.5, COLS-0.5)
+function wrapTunnel(m) {
+  if (tunnelRowSet.has(Math.round(m.y))) {
+    if (m.x < -0.5) m.x += COLS;
+    else if (m.x > COLS - 0.5) m.x -= COLS;
+  }
+}
 
 function stepGrid(m, dt, pickDir, passable) {
   let rem = m.speed * dt;
@@ -280,7 +539,14 @@ function updatePac(dt) {
   const wasX = pac.x, wasY = pac.y;
   stepGrid(pac, dt, pacPick, pacPassable);
   // eating (check tiles traversed this frame, incl. current)
-  const tiles = tilesAlong(wasX, wasY, pac.x, pac.y);
+  let tiles;
+  if (tunnelRowSet.has(Math.round(pac.y)) && (pac.x < -0.5 || pac.x > COLS - 0.5)) {
+    // crossed a tunnel seam this frame — split the path at the seam
+    tiles = tunnelCrossTiles(wasX, pac.x, Math.round(pac.y));
+    if (pac.x < -0.5) pac.x += COLS; else pac.x -= COLS;
+  } else {
+    tiles = tilesAlong(wasX, wasY, pac.x, pac.y);
+  }
   for (const [c, r] of tiles) {
     if (dot[r][c] === 1) {
       dot[r][c] = 0; score += 10; dotsLeft--;
@@ -317,6 +583,15 @@ function tilesAlong(x0, y0, x1, y1) {
   }
   push(Math.round(x1), Math.round(y1));
   return out;
+}
+// Tiles physically traversed when crossing a tunnel seam (no interpolation across the seam)
+function tunnelCrossTiles(x0, x1, r) {
+  const out = [];
+  const add = (a, b) => { for (const t of tilesAlong(a, r, b, r)) out.push(t); };
+  if (x1 < -0.5) { add(x0, -0.5); add(COLS - 0.5, x1 + COLS); }
+  else { add(x0, COLS - 0.5); add(-0.5, x1 - COLS); }
+  const seen = new Set();
+  return out.filter(t => { const k = t[0] + "," + t[1]; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 // ---------------- Ghost AI ----------------
@@ -381,6 +656,7 @@ function updateGhost(g, dt) {
 
   const bx = g.x, by = g.y;
   stepGrid(g, dt, (cx, cy) => ghostPick(g, cx, cy), ghostPassable);
+  wrapTunnel(g);
 
   // eyes reached (or crossed, between frames) home tile -> re-enter house
   if (g.state === "eyes") {
@@ -464,6 +740,7 @@ function update(dt) {
   houseClock += (state === "ready" || state === "play") ? dt : 0;
 
   if (state === "ready") {
+    if (waitStart) return; // wait for the player (initial load)
     stateTimer -= dt;
     if (stateTimer <= 0) setState("play");
     return;
@@ -472,7 +749,7 @@ function update(dt) {
     stateTimer -= dt;
     if (stateTimer <= 0) {
       lives--;
-      if (lives < 0) { setState("gameover"); }
+      if (lives <= 0) { setState("gameover"); }
       else { resetPositions(); setState("ready"); stateTimer = 1.6; }
     }
     return;
@@ -482,7 +759,9 @@ function update(dt) {
     if (stateTimer <= 0) {
       level++;
       parseMaze();
+      buildMazeLayer(); // walls/dots for the next maze
       dotsLeft = countDots();
+      dotsTotal = dotsLeft;
       resetPositions();
       setState("ready"); stateTimer = 1.6;
     }
@@ -505,34 +784,68 @@ mazeLayer.width = W; mazeLayer.height = H;
 const mctx = mazeLayer.getContext("2d");
 function buildMazeLayer() {
   mctx.clearRect(0, 0, W, H);
-  // dark navy wall fill
-  mctx.fillStyle = "#181858";
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (wall[r][c]) {
-        mctx.fillRect(MX + c * TILE, MY + r * TILE, TILE, TILE);
+  // Rounded walls: each wall tile is a full-size rounded rect (wall thickness
+  // stays 1 tile), with a tight radius on convex corners and a matching fillet
+  // (quarter disc) on concave corners, so every wall edge is smoothly rounded.
+  const CR = 5; // corner radius in px
+  const isW = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS && wall[r][c] !== 0;
+  const wallsAt = (i, j) =>
+    (isW(i - 1, j - 1) ? 1 : 0) + (isW(i, j - 1) ? 1 : 0) +
+    (isW(i - 1, j) ? 1 : 0) + (isW(i, j) ? 1 : 0);
+  const drawWalls = (grow, radius, fill, glow) => {
+    const g = mctx;
+    g.beginPath();
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (!isW(c, r)) continue;
+        const x = MX + c * TILE - grow, y = MY + r * TILE - grow, s = TILE + grow * 2;
+        const rad = [ // round a tile corner only at convex corners of the union
+          wallsAt(c, r) === 1 ? radius + grow : 0,
+          wallsAt(c + 1, r) === 1 ? radius + grow : 0,
+          wallsAt(c + 1, r + 1) === 1 ? radius + grow : 0,
+          wallsAt(c, r + 1) === 1 ? radius + grow : 0,
+        ];
+        g.moveTo(x + rad[0], y);
+        g.lineTo(x + s - rad[1], y);
+        if (rad[1]) g.arcTo(x + s, y, x + s, y + s, rad[1]);
+        g.lineTo(x + s, y + s - rad[2]);
+        if (rad[2]) g.arcTo(x + s, y + s, x, y + s, rad[2]);
+        g.lineTo(x + rad[3], y + s);
+        if (rad[3]) g.arcTo(x, y + s, x, y, rad[3]);
+        g.lineTo(x, y + rad[0]);
+        if (rad[0]) g.arcTo(x, y, x + s, y, rad[0]);
+        g.closePath();
       }
     }
-  }
-  // glowing rim where wall meets open space
-  mctx.strokeStyle = "#4d4dff";
-  mctx.lineWidth = 2;
-  mctx.shadowColor = "#4444ff";
-  mctx.shadowBlur = 8;
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (!wall[r][c] || wall[r][c] === 2) continue;
-      const x = MX + c * TILE, y = MY + r * TILE;
-      const open = (cc, rr) => inBounds(cc, rr) && !wall[rr][cc];
-      mctx.beginPath();
-      if (open(c, r - 1)) { mctx.moveTo(x, y + 1); mctx.lineTo(x + TILE, y + 1); }
-      if (open(c, r + 1)) { mctx.moveTo(x, y + TILE - 1); mctx.lineTo(x + TILE, y + TILE - 1); }
-      if (open(c - 1, r)) { mctx.moveTo(x + 1, y); mctx.lineTo(x + 1, y + TILE); }
-      if (open(c + 1, r)) { mctx.moveTo(x + TILE - 1, y); mctx.lineTo(x + TILE - 1, y + TILE); }
-      mctx.stroke();
+    // fillets at concave corners (exactly three wall tiles around the vertex):
+    // a tangent arc centered PAST the corner trims the sharp inner edge — a smooth
+    // negative curve (the arc is tangent to both wall edges, no kinks).
+    const rot = { se: 0, sw: Math.PI / 2, nw: Math.PI, ne: Math.PI * 1.5 };
+    for (let j = 0; j <= ROWS; j++) {
+      for (let i = 0; i <= COLS; i++) {
+        if (wallsAt(i, j) !== 3) continue;
+        const vx = MX + i * TILE, vy = MY + j * TILE, R = radius + grow;
+        const q = !isW(i, j) ? "se" : !isW(i, j - 1) ? "ne" : !isW(i - 1, j) ? "sw" : "nw";
+        g.save();
+        g.translate(vx, vy);
+        g.rotate(rot[q]);
+        // canonical form: open quadrant is SE of the origin, fillet center at (radius, radius)
+        g.moveTo(radius, radius - R);
+        g.arc(radius, radius, R, -Math.PI / 2, Math.PI, true);
+        g.lineTo(-grow, -grow);
+        g.closePath();
+        g.restore();
+      }
     }
-  }
-  mctx.shadowBlur = 0;
+    g.fillStyle = fill;
+    g.shadowColor = "#4444ff";
+    g.shadowBlur = glow ? 8 : 0;
+    g.fill();
+    g.shadowBlur = 0;
+  };
+  // glowing rim first (same shape grown 2px), then the dark fill on top
+  drawWalls(2, CR, "#4d4dff", true);
+  drawWalls(0, CR, "#181858", false);
   // glowing house door
   mctx.fillStyle = "#ffb8de";
   mctx.shadowColor = "#ff66cc";
@@ -656,54 +969,39 @@ function drawHUD() {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, HUD_H);
 
+  // Single top bar: HIGH SCORE | PAC-MAN | LIVES | LEVEL (no side panels)
   // title
   ctx.textAlign = "center";
-  ctx.font = "bold 24px 'Courier New', monospace";
+  ctx.font = "bold 22px 'Courier New', monospace";
   ctx.fillStyle = "#ffe600";
   ctx.shadowColor = "#ffe600";
   ctx.shadowBlur = 12;
-  ctx.fillText("PAC-MAN", W / 2, 40);
+  ctx.fillText("Puck-Man", W / 2, 36);
   ctx.shadowBlur = 0;
 
-  const ly = MY + 90;
-  // left panel: score / high score / lives
+  const labelY = 22, valueY = 44;
+  // HIGH SCORE (left, white value)
   ctx.textAlign = "left";
-  ctx.font = "16px 'Courier New', monospace";
-  const lx = 18;
-  ctx.fillStyle = "#fff";
-  ctx.fillText("SCORE", lx, ly);
-  ctx.fillStyle = "#ffe600";
-  ctx.fillText(String(score).padStart(5, "0"), lx, ly + 22);
-  ctx.fillStyle = "#fff";
-  ctx.fillText("HIGH SCORE", lx, ly + 58);
-  ctx.fillText(String(highScore).padStart(5, "0"), lx, ly + 80);
-  ctx.fillText("LIVES", lx, ly + 118);
-  for (let i = 0; i < Math.max(0, lives - 1); i++) {
-    const x = lx + 12 + i * 26, y = ly + 142;
-    ctx.fillStyle = "#ffe600";
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.arc(x, y, 10, Math.PI + 0.5, Math.PI - 0.5 + Math.PI * 2);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // right panel: level / dots / controls
-  ctx.textAlign = "right";
-  const rx = W - 18;
-  ctx.fillStyle = "#fff";
-  ctx.font = "16px 'Courier New', monospace";
-  ctx.fillText("LEVEL", rx, ly);
-  ctx.fillStyle = "#ffe600";
-  ctx.fillText(String(level), rx, ly + 22);
-  ctx.fillStyle = "#fff";
-  ctx.fillText("DOTS LEFT", rx, ly + 58);
-  ctx.fillText(String(dotsLeft), rx, ly + 80);
-  ctx.fillStyle = "#8899ff";
   ctx.font = "13px 'Courier New', monospace";
-  ctx.fillText("ARROWS/WASD MOVE", rx, ly + 130);
-  ctx.fillText("P PAUSE   M MUTE", rx, ly + 150);
-  ctx.fillText("ENTER RESTART", rx, ly + 170);
+  ctx.fillStyle = "#fff";
+  ctx.fillText("HIGH SCORE", 12, labelY);
+  ctx.font = "bold 15px 'Courier New', monospace";
+  ctx.fillText(String(highScore).padStart(5, "0"), 12, valueY);
+  // LIVES — spare lives (arcade style: 0 on your last life), right of center
+  ctx.textAlign = "center";
+  ctx.font = "13px 'Courier New', monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("LIVES", 452, labelY);
+  ctx.font = "bold 15px 'Courier New', monospace";
+  ctx.fillStyle = "#ffe600";
+  ctx.fillText(String(Math.max(0, lives - 1)), 452, valueY);
+  // LEVEL — far right of the HUD bar
+  ctx.fillStyle = "#fff";
+  ctx.font = "13px 'Courier New', monospace";
+  ctx.fillText("LEVEL", 545, labelY);
+  ctx.font = "bold 15px 'Courier New', monospace";
+  ctx.fillStyle = "#ffe600";
+  ctx.fillText(String(level), 545, valueY);
 }
 
 function drawOverlayText(lines) {
@@ -721,24 +1019,36 @@ function drawOverlayText(lines) {
 function render() {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, H);
+  // HUD first: its black title bar is only 60px tall, and the maze's glowing
+  // rim (grown 2px + 8px glow) pokes into that band — drawing the maze after
+  // the HUD keeps the top rim line from being erased.
+  drawHUD();
   drawMaze();
   for (const g of ghosts) if (g.state !== "house") drawGhost(g);
-  drawGhostHouseIcons();
+  if (state !== "gameover") drawGhostHouseIcons(); // keep the box clear for GAME OVER text
   if (state !== "dying" || stateTimer > 0.05) drawPac(state === "dying" ? Math.max(0, stateTimer / 1.4) : 1);
-  drawHUD();
 
   if (state === "ready") {
-    drawOverlayText([{ text: "READY!", color: "#ffe600", y: HUD_H + 16 * TILE, font: "24px 'Courier New', monospace" }]);
+    // centered inside the ghost house box (rows 13-15, all mazes)
+    const lines = [{ text: "READY!", color: "#ffe600", y: MY + 14 * TILE + 10, font: "bold 14px 'Courier New', monospace" }];
+    if (waitStart && Math.floor(performance.now() / 500) % 2 === 0) {
+      lines.push({ text: "PRESS ANY KEY TO START", color: "#22ff88", y: MY + 17 * TILE - 2, font: "bold 12px 'Courier New', monospace" }); // above the dot row
+    }
+    drawOverlayText(lines);
   } else if (state === "gameover") {
+    // both lines centered inside the ghost house box (rows 13-15, all mazes);
+    // score and INSERT COIN alternate every ~4.5s to save space
+    const showCoin = Math.floor(performance.now() / 4500) % 2 === 1;
     drawOverlayText([
-      { text: "GAME OVER", color: "#ff2222", y: HUD_H + 15 * TILE, font: "28px 'Courier New', monospace" },
-      { text: "FINAL SCORE " + score, y: HUD_H + 17 * TILE },
-      { text: "PRESS ENTER TO RESTART", color: "#8899ff", y: HUD_H + 19 * TILE },
+      { text: "GAME OVER", color: "#ff2222", y: MY + 13 * TILE + 22, font: "bold 15px 'Courier New', monospace" },
+      showCoin
+        ? { text: "INSERT COIN", color: "#ffe600", y: MY + 13 * TILE + 44, font: "13px 'Courier New', monospace" }
+        : { text: "SCORE " + score, color: "#ffffff", y: MY + 13 * TILE + 44, font: "13px 'Courier New', monospace" },
     ]);
   } else if (state === "levelup") {
-    drawOverlayText([{ text: "LEVEL CLEAR!", color: "#22ff88", y: HUD_H + 16 * TILE, font: "24px 'Courier New', monospace" }]);
+    drawOverlayText([{ text: "LEVEL CLEAR!", color: "#22ff88", y: MY + 14 * TILE + 10, font: "bold 14px 'Courier New', monospace" }]); // 14px: box is only 120px wide
   } else if (state === "paused") {
-    drawOverlayText([{ text: "PAUSED", color: "#8899ff", y: HUD_H + 16 * TILE, font: "24px 'Courier New', monospace" }]);
+    drawOverlayText([{ text: "PAUSED", color: "#8899ff", y: MY + 14 * TILE + 10, font: "22px 'Courier New', monospace" }]);
   } else if (state === "play" && score === 0 && houseClock < 0.5) {
     drawOverlayText([{ text: "PRESS ANY ARROW TO MOVE", color: "#556", y: HUD_H + 20 * TILE, font: "14px 'Courier New', monospace" }]);
   }
@@ -752,8 +1062,176 @@ function drawGhostHouseIcons() {
   }
 }
 
+// ---------------- CRT glass (WebGL shader layer) ----------------
+// The game renders to the 2D canvas; each frame we upload it as a texture
+// and draw it through a fragment shader (scanlines / tube curvature / glass
+// sheen). Written from scratch — no external shader files.
+let fx = document.getElementById("fx");
+const crtlabel = document.getElementById("crtlabel");
+let fxGL = null;
+function initFX() {
+  const gl = fx.getContext("webgl", { alpha: false });
+  if (!gl) return;
+  const VS = [
+    "attribute vec2 a_pos;",
+    "varying vec2 vUv;",
+    "void main() {",
+    "  vUv = vec2(0.5 + a_pos.x * 0.5, 0.5 - a_pos.y * 0.5);",
+    "  gl_Position = vec4(a_pos, 0.0, 1.0);",
+    "}",
+  ].join("\n");
+  const FS = [
+    "precision highp float;",
+    "varying vec2 vUv;",
+    "uniform sampler2D u_tex;",
+    "uniform vec2 u_res;",
+    "uniform float u_time;",
+    "uniform int u_mode; // 0 pass-through, 1 arcade CRT, 2 glass TV",
+    "vec3 glow8(sampler2D t, vec2 p, vec2 px) {",
+    "  vec3 s = vec3(0.0);",
+    "  s += texture2D(t, p + vec2( px.x, 0.0)).rgb;",
+    "  s += texture2D(t, p + vec2(-px.x, 0.0)).rgb;",
+    "  s += texture2D(t, p + vec2(0.0,  px.y)).rgb;",
+    "  s += texture2D(t, p + vec2(0.0, -px.y)).rgb;",
+    "  s += texture2D(t, p + vec2(2.0*px.x, 0.0)).rgb;",
+    "  s += texture2D(t, p + vec2(-2.0*px.x, 0.0)).rgb;",
+    "  s += texture2D(t, p + vec2(0.0, 2.0*px.y)).rgb;",
+    "  s += texture2D(t, p + vec2(0.0, -2.0*px.y)).rgb;",
+    "  return s * 0.125;",
+    "}",
+    "void main() {",
+    "  vec2 uv = vUv;",
+    "  vec2 px = 1.0 / u_res;",
+    "  vec2 c = uv - 0.5;",
+    "  float r2 = dot(c, c);",
+    "  vec3 col;",
+    "  if (u_mode == 2) { // glass TV — Newpixie-crt (3px) style",
+    "    vec2 suv = 0.5 + c * (1.0 + 0.18 * r2);",
+    "    if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) {",
+    "      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return;",
+    "    }",
+    "    // per-channel chromatic bleed (newpixie R/G/B offset sampling)",
+    "    col.r = texture2D(u_tex, suv + vec2(0.5, 0.4) * px).r + 0.02;",
+    "    col.g = texture2D(u_tex, suv + vec2(0.0, -0.6) * px).g + 0.02;",
+    "    col.b = texture2D(u_tex, suv + vec2(-0.9, 0.0) * px).b + 0.02;",
+    "    col += (glow8(u_tex, suv, px) - col) * 0.30; // soft bloom (ghosting stand-in)",
+    "    // level S-curve (newpixie level adjustment)",
+    "    col = clamp(col * 1.3 + 0.75 * col * col + 1.25 * col * col * col * col * col, vec3(0.0), vec3(10.0));", // col^5 (GLSL ES pow is scalar-only)
+    "    // strong tube vignette: bright center, dark rim",
+    "    float vig = 0.01 + 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);",
+    "    col *= 1.3 * sqrt(vig);",
+    "    // rolling scanlines, ~4 texel period",
+    "    float scans = clamp(0.35 + 0.18 * sin(u_time * 6.0 - suv.y * u_res.y * 1.5), 0.0, 1.0);",
+    "    col *= pow(scans, 0.9);",
+    "    // 3px vertical shadow mask (the 3px in the shader name)",
+    "    col *= 1.0 - 0.23 * clamp(mod(suv.x * u_res.x, 3.0) / 2.0, 0.0, 1.0);",
+    "    // filmic tone map",
+    "    vec3 fc = max(col, vec3(0.0));",
+    "    col = (fc * (6.2 * fc + 0.5)) / (fc * (6.2 * fc + 1.7) + 0.06);",
+    "    float d = uv.x * 0.65 + uv.y * 0.75; // diagonal sheen band",
+    "    float sheen = exp(-pow((d - 1.08) / 0.16, 2.0)) * 0.05;",
+    "    sheen += exp(-pow(length(uv - vec2(0.16, 0.14)) / 0.30, 2.0)) * 0.035;",
+    "    col += sheen;",
+    "    col *= 1.0 + 0.008 * sin(u_time * 377.0); // faint flicker",
+    "  } else if (u_mode == 1) { // arcade CRT: scanlines + grille + glow",
+    "    col = texture2D(u_tex, uv).rgb;",
+    "    float row = fract(uv.y * u_res.y * 0.5);",
+    "    col *= 0.80 + 0.20 * cos(row * 6.28318); // scanlines every 2 texels",
+    "    col *= 0.95 + 0.05 * cos(fract(uv.x * u_res.x) * 3.14159); // aperture grille",
+    "    col += (glow8(u_tex, uv, px) - col) * 0.40; // phosphor glow",
+    "    col = vec3(pow(max(col.r, 0.0), 0.625), pow(max(col.g, 0.0), 0.625), pow(max(col.b, 0.0), 0.625));", // gamma 1/1.6, per-channel (GLSL ES pow is scalar-only)
+    "    col *= 1.0 - 0.30 * smoothstep(0.18, 0.50, r2); // mild vignette",
+    "  } else { // pass-through",
+    "    col = texture2D(u_tex, uv).rgb;",
+    "  }",
+    "  gl_FragColor = vec4(col, 1.0);",
+    "}",
+  ].join("\n");
+  function makeShader(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(s)); return null;
+    }
+    return s;
+  }
+  const vs = makeShader(gl.VERTEX_SHADER, VS);
+  const fs = makeShader(gl.FRAGMENT_SHADER, FS);
+  if (!vs || !fs) return;
+  const p = gl.createProgram();
+  gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(p)); return;
+  }
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  fxGL = {
+    gl, p, tex,
+    aPos: gl.getAttribLocation(p, "a_pos"),
+    uTex: gl.getUniformLocation(p, "u_tex"),
+    uRes: gl.getUniformLocation(p, "u_res"),
+    uTime: gl.getUniformLocation(p, "u_time"),
+    uMode: gl.getUniformLocation(p, "u_mode"),
+  };
+}
+// Windows/GPU drivers can kill the WebGL context (long tabs, sleep, driver
+// resets). When that happens the fx canvas clears and the plain game shows
+// through. The browser may restore it on its own; if it doesn't, pressing C
+// rebuilds the canvas and gets a brand-new context.
+function setupFxEvents() {
+  fx.addEventListener("webglcontextlost", (e) => {
+    e.preventDefault(); // let the browser try to restore the context
+    fxGL = null;
+    setCRT(0);         // fall back to the plain game canvas
+  });
+  fx.addEventListener("webglcontextrestored", () => {
+    initFX();
+    setCRT(2);         // back to the glass look
+  });
+}
+function recreateFx() {
+  const fresh = fx.cloneNode(false); // same id, size, attributes
+  fx.replaceWith(fresh);
+  fx = fresh;
+  setupFxEvents();
+  initFX();
+}
+initFX();
+setupFxEvents();
+
+let crtMode = 2; // 0 off, 1 arcade, 2 glass (glass is the default look)
+const CRT_NAMES = ["Off", "Arcade", "Glass"];
+function setCRT(m) {
+  crtMode = fxGL ? m : 0; // no WebGL available: plain canvas
+  fx.style.display = crtMode === 0 ? "none" : "block";
+  if (crtlabel) crtlabel.textContent = fxGL ? CRT_NAMES[crtMode] : "No WebGL";
+}
+function fxRender(t) {
+  const f = fxGL;
+  if (!f || crtMode === 0 || f.gl.isContextLost()) return;
+  const { gl, p, tex } = f;
+  gl.viewport(0, 0, fx.width, fx.height);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.useProgram(p);
+  gl.enableVertexAttribArray(f.aPos);
+  gl.vertexAttribPointer(f.aPos, 2, gl.FLOAT, false, 0, 0);
+  gl.uniform1i(f.uTex, 0);
+  gl.uniform2f(f.uRes, W, H);
+  gl.uniform1f(f.uTime, t);
+  gl.uniform1i(f.uMode, crtMode);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+setCRT(2);
+
 // ---------------- Input ----------------
-let highScore = 0;
 const KEYMAP = {
   ArrowUp: { x: 0, y: -1 }, KeyW: { x: 0, y: -1 },
   ArrowLeft: { x: -1, y: 0 }, KeyA: { x: -1, y: 0 },
@@ -762,6 +1240,12 @@ const KEYMAP = {
 };
 window.addEventListener("keydown", (e) => {
   audio();
+  if (waitStart && state === "ready" && (KEYMAP[e.code] || e.code === "Enter" || e.code === "Space")) {
+    waitStart = false;
+    playIntro(); // user gesture => audio unlocked; play the level-start jingle
+    stateTimer = 1.2; // brief READY! before play
+    return;
+  }
   if (KEYMAP[e.code]) {
     e.preventDefault();
     pac.next = KEYMAP[e.code];
@@ -770,10 +1254,13 @@ window.addEventListener("keydown", (e) => {
     if (state === "gameover") newGame();
     else if (state === "ready") { stateTimer = 0; }
   } else if (e.code === "KeyP") {
-    if (state === "play") { prevStateBeforePause = "play"; setState("paused"); }
+    if (state === "play") { setState("paused"); }
     else if (state === "paused") setState("play");
   } else if (e.code === "KeyM") {
     muted = !muted;
+  } else if (e.code === "KeyC") {
+    if (!fxGL || fxGL.gl.isContextLost()) recreateFx(); // hard recovery
+    setCRT((crtMode + 1) % 3);
   } else if (e.code === "Space") {
     e.preventDefault();
     if (state === "gameover") newGame();
@@ -783,13 +1270,17 @@ window.addEventListener("keydown", (e) => {
 
 // ---------------- Main loop ----------------
 newGame();
+waitStart = true; // attract: wait for the player's first key
 let last = performance.now();
 function frame(now) {
   let dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   update(dt);
+  wakaTick();
+  bgmUpdate();
   if (score > highScore) highScore = score;
   render();
+  fxRender(now / 1000);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
