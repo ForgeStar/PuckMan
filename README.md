@@ -11,4 +11,4 @@ A single-file Pac-Man clone in vanilla JS + canvas, rendered inside an arcade ca
 
 This repo is deployed as-is from the root, so the game lives at:
 
-    https://<username>.github.io/<repo-name>/
+    https://forgestar.github.io/PuckMan/
