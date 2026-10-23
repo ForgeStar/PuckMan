@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>パックマン Puck-Man (Bionic Clone)</title>
+<!-- X.com player card: playable in-post embed -->
+<meta name="twitter:card" content="player">
+<meta name="twitter:site" content="@YourXHandle">
+<meta name="twitter:title" content="Puck-Man — Pac-Man Clone">
+<meta name="twitter:description" content="A little single-file Pac-Man in an arcade cabinet. Arrows/WASD or swipe. Playable right here in X.">
+<meta name="twitter:image" content="https://forgestar.github.io/pacman-game/preview.png">
+<meta name="twitter:player" content="https://forgestar.github.io/pacman-game/">
+<meta name="twitter:player:width" content="480">
+<meta name="twitter:player:height" content="480">
 <style>
   html, body {
     margin: 0; height: 100%;
@@ -41,7 +50,7 @@
   <canvas id="game" width="580" height="688"></canvas>
   <canvas id="fx" width="580" height="688"></canvas>
 </div>
-<div id="hint">Arrows / WASD move &middot; P pause &middot; M mute &middot; C CRT: <span id="crtlabel">Glass</span> &middot; Enter start</div>
+<div id="hint">Arrows / WASD or swipe &middot; tap to start &middot; P pause &middot; M mute &middot; C CRT: <span id="crtlabel">Glass</span></div>
 <script>
 "use strict";
 // ============================================================
@@ -1267,6 +1276,44 @@ window.addEventListener("keydown", (e) => {
   }
   if (score > highScore) highScore = score;
 });
+
+// ---------------- Pointer / touch input ----------------
+// Works in the X player-card iframe (click = start) and on touch screens
+// (tap = start/restart, swipe = steer). Keeps the game playable without a keyboard.
+let touchOrigin = null;
+const SWIPE_MIN = 24; // px of travel before a touch counts as a swipe
+function beginGesture(e) {
+  audio(); // user gesture => unlock Web Audio
+  const t = e.touches && e.touches[0];
+  if (t) touchOrigin = { x: t.clientX, y: t.clientY };
+}
+function endGesture(e) {
+  const c = (e.changedTouches && e.changedTouches[0]) || e;
+  const sx = touchOrigin ? touchOrigin.x : c.clientX;
+  const sy = touchOrigin ? touchOrigin.y : c.clientY;
+  touchOrigin = null;
+  const dx = c.clientX - sx, dy = c.clientY - sy;
+  if (Math.abs(dx) < SWIPE_MIN && Math.abs(dy) < SWIPE_MIN) {
+    // tap / click: start the game, or restart after game over
+    if (waitStart && state === "ready") {
+      waitStart = false;
+      playIntro();
+      stateTimer = 1.2;
+    } else if (state === "gameover") newGame();
+  } else {
+    // swipe: steer Pac-Man (dominant axis wins)
+    pac.next = Math.abs(dx) > Math.abs(dy) ? { x: Math.sign(dx), y: 0 } : { x: 0, y: Math.sign(dy) };
+    if (waitStart && state === "ready") {
+      waitStart = false;
+      playIntro();
+      stateTimer = 1.2;
+    } else if (state === "gameover") newGame();
+  }
+  if (score > highScore) highScore = score;
+}
+window.addEventListener("touchstart", beginGesture, { passive: true });
+window.addEventListener("touchend", endGesture);
+window.addEventListener("click", endGesture);
 
 // ---------------- Main loop ----------------
 newGame();
