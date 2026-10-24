@@ -53,7 +53,7 @@ triangle/pulse if going that deep.
 - **Google Pac-Man doodle audio engine** (pure WSG-style synthesis, has every
   track incl. siren tiers, fright, intro):
   `https://raw.githubusercontent.com/livingston/google-pacman/master/pacman-audio.js`
-  (saved to `C:\tmp\pacman-audio.js`). Its `makeSiren(rate,center,depth)` =
+  (saved locally for reference). Its `makeSiren(rate,center,depth)` =
   triangle + triangle LFO; `makeFright()` = sawtooth 120 Hz + 7.5 Hz FM;
   `makeEyes()` = square 550 Hz pulsed 16.67 Hz; `start-music` = B-major melody.
 - **WSG hardware:** Namco 3-voice wavetable, 96 kHz clock (Z80 3.072 MHz ÷ 32),
@@ -64,7 +64,7 @@ triangle/pulse if going that deep.
 - **MAME `namco.cpp`** — accurate software WSG model.
 - Reference gameplay clip: `https://www.youtube.com/watch?v=i_OjztdQ8iw`
 
-## Prior DSP extraction (from the downloaded reference clip, `C:\tmp\pacmanref.wav`)
+## Prior DSP extraction (from the downloaded reference clip)
 - In-game BGM loop period ≈ 1.146 s. Pitch-tracked (approx, waka contamination
   possible): `F5 G5 A5 F5 D#5 A4 D5 E5 G#5 A#5 G#5 F#5 E5 D5 A#4 D5 E5 F#5 G#5
   A#5 G#5 F#5 E5 A#4 G#4` (recognizable ascending/descending chase figures).
@@ -91,6 +91,5 @@ triangle/pulse if going that deep.
 
 ## Dev/verification
 - JS syntax check: extract inline script → `deno check`
-  (`C:\Users\rex\AppData\Local\Programs\Python\Python311\Scripts\deno.exe`).
 - Headless test (audio autoplay warnings expected): Brave `--headless=new`
   `--screenshot` `--window-size=1000,950 --virtual-time-budget=3000 file://...`

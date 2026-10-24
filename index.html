@@ -253,13 +253,13 @@ function beep(freq, dur, type = "square", vol = 0.04, slideTo = 0) {
 // (fast square-wave alternation) that persists while Pac-Man keeps eating.
 // Each dot eaten *extends* the train instead of firing one isolated beep.
 let wakaUntil = 0, wakaNext = 0, wakaStep = 0;
-// Waka-waka (Namco WSG, per Grok's analysis): a CONTINUOUS train of short
+// Waka-waka (Namco WSG style): a CONTINUOUS train of short
 // frequency *sweeps* — each chomp is a ~67 ms linear sweep, up (257->289 Hz) then
 // down (289->257), running almost back-to-back while eating. No deliberate silence
 // between chomps (a gap is what made the earlier static-blip version read as wrong).
-const WAKA_INTERVAL = 0.13; // one sweep per 67 ms (raise = slower chomps; 0.1 = your slower test)
+const WAKA_INTERVAL = 0.13; // one sweep per 67 ms (raise = slower chomps)
 const WAKA_LO = 196, WAKA_HI = 220; // sweep endpoints (Hz) — F3/G3; lower = deeper chomp
-const WAKA_VOL = 0.05;   // chomp volume (Grok suggested 0.14; raise = louder)
+const WAKA_VOL = 0.05;   // chomp volume (raise = louder)
 function wakaNote(t, f1, f2, dur) {
   if (muted || !actx) return;
   const o = actx.createOscillator(), g = actx.createGain();
