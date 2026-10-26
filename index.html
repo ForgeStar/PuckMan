@@ -28,7 +28,13 @@
     display: block;
     width: 100%;
     padding-top: 91.3125%; /* panel aspect 1461/1600 */
-    background: url("bezel.png") 0 0 / 100% 100% no-repeat;
+  }
+  /* Bezel art as an <img> (behind the canvases): WebP for size, PNG fallback */
+  #panel {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
   }
   canvas {
     display: block; background: #000; image-rendering: pixelated;
@@ -47,6 +53,7 @@
 </head>
 <body>
 <div id="bezel">
+  <img id="panel" src="bezel.webp" alt="" onerror="this.onerror=null;this.src='bezel.png'">
   <canvas id="game" width="580" height="688"></canvas>
   <canvas id="fx" width="580" height="688"></canvas>
 </div>
